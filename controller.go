@@ -43,7 +43,7 @@ func (x xposer) run(ch <-chan struct{}) {
 	// Make sure informer cache is synced succesfully
 	// we need to pass it a channel of struct{}
 	// if this is not done then something went wrong
-	if cache.WaitForCacheSync(ch, x.hasSynced) {
+	if !cache.WaitForCacheSync(ch, x.hasSynced) {
 		klog.Errorln("Cache could not sync due to some reason")
 	}
 
