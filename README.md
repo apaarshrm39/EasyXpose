@@ -7,3 +7,10 @@ The label required to expose the pod
 ```
 apaarshrm/port: "80"
 ```
+
+The following annotations are needed for Ingress
+```
+annotations:
+    apaarshrm/host: ""
+    apaarshrm/path: /
+```

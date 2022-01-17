@@ -6,6 +6,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	network "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -79,7 +80,8 @@ func (x xposer) process() bool {
 		return false
 	}
 
-	err = x.expose(ns, name)
+	err = x.exposeServie(ns, name)
+	err = x.exposeIngress(ns, name)
 	if err != nil {
 		return false
 	}
@@ -89,7 +91,7 @@ func (x xposer) process() bool {
 	return true
 }
 
-func (x xposer) expose(ns, n string) error {
+func (x xposer) exposeServie(ns, n string) error {
 	deploy, err := x.depLister.Deployments(ns).Get(n)
 	if err != nil {
 		klog.Errorln("error: ", err)
@@ -125,6 +127,70 @@ func (x xposer) expose(ns, n string) error {
 		return nil
 	} else {
 		klog.Infoln("The deployment does not have the required label", n)
+		return nil
+	}
+}
+
+func (x xposer) exposeIngress(ns, n string) error {
+	deploy, err := x.depLister.Deployments(ns).Get(n)
+	if err != nil {
+		klog.Errorln("error: ", err)
+		return err
+	}
+
+	anno := deploy.Annotations
+
+	labels := deploy.Labels
+	val, foundV := anno["apaarshrm/host"]
+	path, foundP := anno["apaarshrm/path"]
+	port, foundPort := labels["apaarshrm/port"]
+
+	if foundV && foundP && foundPort {
+		pathType := "Prefix"
+		//do something here
+		//}
+		ing := network.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      n + "-ingress",
+				Namespace: ns,
+			},
+			Spec: network.IngressSpec{
+				Rules: []network.IngressRule{
+					network.IngressRule{
+						Host: val,
+						IngressRuleValue: network.IngressRuleValue{
+							HTTP: &network.HTTPIngressRuleValue{
+								Paths: []network.HTTPIngressPath{
+									network.HTTPIngressPath{
+										Path:     path,
+										PathType: (*network.PathType)(&pathType),
+										Backend: network.IngressBackend{
+											Service: &network.IngressServiceBackend{
+												Name: n + "-svc",
+												Port: network.ServiceBackendPort{
+													Number: stringToInt32(port),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		_, err = x.clientset.NetworkingV1().Ingresses(ns).Create(context.TODO(), &ing, metav1.CreateOptions{})
+		//_, err = x.clientset.CoreV1().Services(ns).Create(context.TODO(), &svc, metav1.CreateOptions{})
+		if err != nil {
+			klog.Errorln(err)
+			return err
+		}
+		klog.Info("Ingress created succesfully for ", n)
+		return nil
+	} else {
+		klog.Infoln("The deployment does not have the required labels for Ingress", n)
 		return nil
 	}
 }
